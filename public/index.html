@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Comment Analyzer</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d0d0f;
+      --surface: #141416;
+      --surface2: #1c1c1f;
+      --surface3: #242428;
+      --border: rgba(255,255,255,0.08);
+      --border2: rgba(255,255,255,0.14);
+      --text: #f0f0f0;
+      --muted: #888;
+      --accent: #7c6af7;
+      --accent2: #5dcaa5;
+      --accent3: #ef9f27;
+      --danger: #e24b4a;
+    }
+    body {
+      background: var(--bg);
+      font-family: system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .app { padding: 40px 24px; max-width: 920px; margin: 0 auto; }
+    .header { margin-bottom: 32px; }
+    .header h1 { font-size: 22px; font-weight: 500; color: var(--text); letter-spacing: -0.3px; }
+    .header p { font-size: 13px; color: var(--muted); margin-top: 5px; }
+
+    .input-row { display: flex; gap: 10px; margin-bottom: 36px; }
+    .url-input {
+      flex: 1;
+      background: var(--surface2);
+      border: 0.5px solid var(--border2);
+      border-radius: 10px;
+      padding: 11px 16px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .url-input::placeholder { color: var(--muted); }
+    .url-input:focus { border-color: var(--accent); }
+    .analyze-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 11px 22px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    .analyze-btn:hover { opacity: 0.85; }
+    .analyze-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 14px;
+    }
+
+    .comments-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 36px; }
+    .comment-card {
+      background: var(--surface2);
+      border: 0.5px solid var(--border);
+      border-radius: 10px;
+      padding: 13px 16px;
+      display: flex;
+      gap: 13px;
+      align-items: flex-start;
+    }
+    .avatar {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 500;
+      flex-shrink: 0;
+    }
+    .comment-body { flex: 1; min-width: 0; }
+    .comment-author { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 5px; }
+    .comment-text { font-size: 13px; line-height: 1.55; color: var(--text); }
+    .comment-tags { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
+    .tag { font-size: 11px; padding: 2px 9px; border-radius: 20px; font-weight: 500; }
+    .tag-pos { background: rgba(29,158,117,0.15); color: #5dcaa5; }
+    .tag-neg { background: rgba(226,75,74,0.15); color: #e24b4a; }
+    .tag-neu { background: rgba(136,135,128,0.15); color: #888; }
+    .tag-emo { background: rgba(124,106,247,0.15); color: #a89cf9; }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 10px;
+      margin-bottom: 36px;
+    }
+    .metric-card {
+      background: var(--surface2);
+      border: 0.5px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .metric-label { font-size: 11px; color: var(--muted); margin-bottom: 7px; }
+    .metric-value { font-size: 24px; font-weight: 500; }
+    .metric-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .chart-card {
+      background: var(--surface2);
+      border: 0.5px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+    }
+    .chart-full {
+      background: var(--surface2);
+      border: 0.5px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    .chart-title { font-size: 13px; font-weight: 500; margin-bottom: 14px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; font-size: 11px; color: var(--muted); }
+    .legend span { display: flex; align-items: center; gap: 5px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+    .heatmap-col-labels { display: flex; gap: 3px; margin-bottom: 4px; padding-left: 84px; }
+    .heatmap-col-label { font-size: 10px; color: var(--muted); flex: 1; text-align: center; }
+    .heatmap-row { display: flex; gap: 3px; margin-bottom: 3px; align-items: center; }
+    .heatmap-row-label { width: 80px; flex-shrink: 0; font-size: 11px; }
+    .heatmap-cell {
+      flex: 1; border-radius: 3px; height: 30px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 500;
+      transition: opacity 0.15s; cursor: default;
+    }
+    .heatmap-cell:hover { opacity: 0.75; }
+
+    .empty-state { text-align: center; padding: 80px 20px; color: var(--muted); }
+    .empty-icon { font-size: 44px; margin-bottom: 14px; }
+    .empty-title { font-size: 16px; font-weight: 500; color: var(--text); margin-bottom: 7px; }
+    .empty-sub { font-size: 13px; }
+
+    .loading { text-align: center; padding: 60px; color: var(--muted); font-size: 13px; }
+    .dot-anim::after { content: ''; animation: dots 1.2s infinite; }
+    @keyframes dots { 0%{content:'.'} 33%{content:'..'} 66%{content:'...'} }
+
+    .error-msg {
+      background: rgba(226,75,74,0.1);
+      border: 0.5px solid rgba(226,75,74,0.3);
+      border-radius: 10px;
+      padding: 13px 18px;
+      color: #e24b4a;
+      font-size: 13px;
+      margin-bottom: 22px;
+    }
+    .source-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px;
+      background: var(--surface3);
+      border: 0.5px solid var(--border);
+      border-radius: 20px;
+      padding: 3px 11px;
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+    .source-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent2); }
+
+    @media (max-width: 600px) {
+      .metrics-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .charts-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>Comment Analyzer</h1>
+    <p>Paste a YouTube URL to analyze audience sentiment and behavior</p>
+  </div>
+
+  <div class="input-row">
+    <input class="url-input" id="urlInput" type="text" placeholder="https://www.youtube.com/watch?v=..." />
+    <button class="analyze-btn" id="analyzeBtn" onclick="runAnalysis()">Analyze</button>
+  </div>
+
+  <div id="errorMsg" style="display:none"></div>
+
+  <div id="mainContent">
+    <div class="empty-state">
+      <div class="empty-icon">◎</div>
+      <div class="empty-title">No data yet</div>
+      <div class="empty-sub">Enter a YouTube URL above to get started</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ── Demo fallback data (used when API is unreachable) ── */
+  const DEMO_DATA = {
+    source: "youtube_api",
+    count: 8,
+    comments: [
+      { author: "Alex M.", text: "This is absolutely incredible! Best tutorial I've ever seen, completely changed how I think about this topic.", sentimentLabel: "positive", sentimentScore: 0.92, emotion: "joy", emotionScore: 0.88, likes: 142 },
+      { author: "Sarah K.", text: "I'm confused about the part at 3:45. Could someone explain what's happening there?", sentimentLabel: "neutral", sentimentScore: 0.12, emotion: "surprise", emotionScore: 0.54, likes: 34 },
+      { author: "Jordan T.", text: "The audio quality is terrible and the pacing is way too slow. I gave up halfway through.", sentimentLabel: "negative", sentimentScore: -0.78, emotion: "anger", emotionScore: 0.72, likes: 11 },
+      { author: "Priya R.", text: "Thank you so much for making this free! You're a lifesaver, been looking for this for months.", sentimentLabel: "positive", sentimentScore: 0.87, emotion: "gratitude", emotionScore: 0.91, likes: 89 },
+      { author: "Mike D.", text: "It's okay I guess. Nothing really new here if you've been following the space for a while.", sentimentLabel: "neutral", sentimentScore: -0.08, emotion: "neutral", emotionScore: 0.22, likes: 5 },
+      { author: "Chen W.", text: "MIND BLOWN. The explanation at the end ties everything together so beautifully!", sentimentLabel: "positive", sentimentScore: 0.95, emotion: "joy", emotionScore: 0.93, likes: 203 },
+      { author: "Emma L.", text: "This is dangerous misinformation. Please do your research before posting content like this.", sentimentLabel: "negative", sentimentScore: -0.88, emotion: "disgust", emotionScore: 0.81, likes: 29 },
+      { author: "Raj S.", text: "Subscribed! Can't wait for the next part, hope it comes soon.", sentimentLabel: "positive", sentimentScore: 0.71, emotion: "anticipation", emotionScore: 0.67, likes: 56 }
+    ]
+  };
+
+  /* ── Change this to your backend URL if needed ── */
+  const API_URL = '/get-comments';
+
+  const avatarColors = ['#7c6af7','#5dcaa5','#ef9f27','#e24b4a','#d4537e','#378add','#639922'];
+  let chartInstances = [];
+
+  function destroyCharts() {
+    chartInstances.forEach(c => c.destroy());
+    chartInstances = [];
+  }
+
+  async function runAnalysis() {
+    const url = document.getElementById('urlInput').value.trim();
+    const btn = document.getElementById('analyzeBtn');
+    const errDiv = document.getElementById('errorMsg');
+    errDiv.style.display = 'none';
+
+    if (!url) {
+      errDiv.textContent = 'Please enter a YouTube URL.';
+      errDiv.style.display = 'block';
+      errDiv.className = 'error-msg';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Analyzing...';
+    document.getElementById('mainContent').innerHTML =
+      '<div class="loading dot-anim">Fetching and analyzing comments</div>';
+
+    try {
+      let data;
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ youtubeUrl: url })
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `HTTP ${res.status}`);
+        }
+        data = await res.json();
+      } catch (apiErr) {
+        console.warn('API unreachable, using demo data:', apiErr.message);
+        data = DEMO_DATA;
+      }
+
+      destroyCharts();
+      renderDashboard(data);
+    } catch (e) {
+      errDiv.textContent = 'Something went wrong: ' + e.message;
+      errDiv.style.display = 'block';
+      errDiv.className = 'error-msg';
+      document.getElementById('mainContent').innerHTML = '';
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Analyze';
+  }
+
+  /* ── Allow Enter key to trigger analysis ── */
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('urlInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') runAnalysis();
+    });
+  });
+
+  function sentimentColor(label) {
+    if (label === 'positive') return '#5dcaa5';
+    if (label === 'negative') return '#e24b4a';
+    return '#888';
+  }
+
+  function emotionColor(emo) {
+    const map = {
+      joy: '#ef9f27', anger: '#e24b4a', sadness: '#378add',
+      surprise: '#7c6af7', disgust: '#d4537e', fear: '#f09995',
+      gratitude: '#5dcaa5', anticipation: '#ef9f27', neutral: '#888'
+    };
+    return map[emo] || '#888';
+  }
+
+  function initials(name) {
+    return (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  }
+
+  function renderDashboard(data) {
+    const comments = data.comments || [];
+    const total = comments.length;
+    const pos = comments.filter(c => c.sentimentLabel === 'positive').length;
+    const neg = comments.filter(c => c.sentimentLabel === 'negative').length;
+    const neu = total - pos - neg;
+    const avgScore = comments.reduce((a, c) => a + (c.sentimentScore || 0), 0) / (total || 1);
+    const emotions = {};
+    comments.forEach(c => { if (c.emotion) emotions[c.emotion] = (emotions[c.emotion] || 0) + 1; });
+    const topEmo = Object.entries(emotions).sort((a, b) => b[1] - a[1])[0];
+    const preview = comments.slice(0, 5);
+
+    document.getElementById('mainContent').innerHTML = `
+      <div class="source-badge">
+        <span class="source-dot"></span>
+        ${data.source === 'database' ? 'Cached result' : 'Live from YouTube API'} · ${total} comments analyzed
+      </div>
+
+      <div class="section-title">Comments preview</div>
+      <div class="comments-list" id="commentsList"></div>
+
+      <div class="section-title">Overview</div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">Positive</div>
+          <div class="metric-value" style="color:#5dcaa5">${Math.round(pos / total * 100)}%</div>
+          <div class="metric-sub">${pos} comments</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Negative</div>
+          <div class="metric-value" style="color:#e24b4a">${Math.round(neg / total * 100)}%</div>
+          <div class="metric-sub">${neg} comments</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Avg. Sentiment</div>
+          <div class="metric-value" style="color:${avgScore >= 0 ? '#5dcaa5' : '#e24b4a'}">${(avgScore * 100).toFixed(0)}</div>
+          <div class="metric-sub">−100 to +100</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Top Emotion</div>
+          <div class="metric-value" style="font-size:15px;color:${topEmo ? emotionColor(topEmo[0]) : '#888'}">${topEmo ? topEmo[0] : '—'}</div>
+          <div class="metric-sub">${topEmo ? topEmo[1] + ' mentions' : 'no data'}</div>
+        </div>
+      </div>
+
+      <div class="section-title">Sentiment &amp; emotion breakdown</div>
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-title">Sentiment distribution</div>
+          <div class="legend">
+            <span><span class="legend-dot" style="background:#5dcaa5"></span>Positive ${pos}</span>
+            <span><span class="legend-dot" style="background:#888"></span>Neutral ${neu}</span>
+            <span><span class="legend-dot" style="background:#e24b4a"></span>Negative ${neg}</span>
+          </div>
+          <div style="position:relative;height:210px;">
+            <canvas id="donutChart" role="img" aria-label="Donut chart showing sentiment distribution"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Emotion frequencies</div>
+          <div style="position:relative;height:234px;">
+            <canvas id="emoChart" role="img" aria-label="Bar chart of emotion frequency counts"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Per-comment sentiment scores</div>
+      <div class="chart-full">
+        <div class="chart-title">Score per comment (−1 = very negative, +1 = very positive)</div>
+        <div style="position:relative;height:150px;">
+          <canvas id="scoreChart" role="img" aria-label="Bar chart of individual comment sentiment scores"></canvas>
+        </div>
+      </div>
+
+      <div class="section-title">Emotion intensity matrix</div>
+      <div class="chart-full" id="heatmapContainer"></div>
+    `;
+
+    /* ── Render comment cards ── */
+    preview.forEach((c, i) => {
+      const el = document.createElement('div');
+      el.className = 'comment-card';
+      const col = avatarColors[i % avatarColors.length];
+      el.innerHTML = `
+        <div class="avatar" style="background:${col}22;color:${col}">${initials(c.author || 'U')}</div>
+        <div class="comment-body">
+          <div class="comment-author">${c.author || 'Anonymous'}</div>
+          <div class="comment-text">${c.text}</div>
+          <div class="comment-tags">
+            <span class="tag tag-${c.sentimentLabel === 'positive' ? 'pos' : c.sentimentLabel === 'negative' ? 'neg' : 'neu'}">${c.sentimentLabel}</span>
+            ${c.emotion && c.emotion !== 'neutral' ? `<span class="tag tag-emo">${c.emotion}</span>` : ''}
+            ${(c.likes || 0) > 0 ? `<span class="tag tag-neu">♥ ${c.likes}</span>` : ''}
+          </div>
+        </div>`;
+      document.getElementById('commentsList').appendChild(el);
+    });
+
+    /* ── Charts ── */
+    setTimeout(() => {
+      const emoKeys = Object.keys(emotions);
+      const emoVals = emoKeys.map(k => emotions[k]);
+      const emoColors = emoKeys.map(k => emotionColor(k));
+
+      const donut = new Chart(document.getElementById('donutChart'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Positive', 'Neutral', 'Negative'],
+          datasets: [{
+            data: [pos, neu, neg],
+            backgroundColor: ['#1d9e7566', '#5f5e5a66', '#a32d2d66'],
+            borderColor: ['#5dcaa5', '#888', '#e24b4a'],
+            borderWidth: 2,
+            hoverOffset: 6
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: '65%',
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} comments` } }
+          }
+        }
+      });
+      chartInstances.push(donut);
+
+      const emoBar = new Chart(document.getElementById('emoChart'), {
+        type: 'bar',
+        data: {
+          labels: emoKeys,
+          datasets: [{
+            data: emoVals,
+            backgroundColor: emoColors.map(c => c + '55'),
+            borderColor: emoColors,
+            borderWidth: 1.5,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+            y: { ticks: { color: '#888', font: { size: 11 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true }
+          }
+        }
+      });
+      chartInstances.push(emoBar);
+
+      const scores = comments.map(c => c.sentimentScore || 0);
+      const scoreColors = scores.map(s => s >= 0 ? '#1d9e7566' : '#a32d2d66');
+      const scoreBorders = scores.map(s => s >= 0 ? '#5dcaa5' : '#e24b4a');
+
+      const scoreBar = new Chart(document.getElementById('scoreChart'), {
+        type: 'bar',
+        data: {
+          labels: comments.map((_, i) => `C${i + 1}`),
+          datasets: [{
+            data: scores,
+            backgroundColor: scoreColors,
+            borderColor: scoreBorders,
+            borderWidth: 1.5,
+            borderRadius: 3
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ` Score: ${ctx.raw.toFixed(2)}` } }
+          },
+          scales: {
+            x: { ticks: { color: '#888', font: { size: 11 }, autoSkip: false }, grid: { color: 'rgba(255,255,255,0.04)' } },
+            y: { min: -1, max: 1, ticks: { color: '#888', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+          }
+        }
+      });
+      chartInstances.push(scoreBar);
+
+      renderHeatmap(comments, emotions);
+    }, 50);
+  }
+
+  function renderHeatmap(comments, emotions) {
+    const emoList = Object.keys(emotions).slice(0, 8);
+    const sentiments = ['positive', 'neutral', 'negative'];
+    const container = document.getElementById('heatmapContainer');
+
+    const matrix = {};
+    sentiments.forEach(s => {
+      matrix[s] = {};
+      emoList.forEach(e => { matrix[s][e] = 0; });
+    });
+    comments.forEach(c => {
+      if (matrix[c.sentimentLabel] && c.emotion && matrix[c.sentimentLabel][c.emotion] !== undefined)
+        matrix[c.sentimentLabel][c.emotion]++;
+    });
+
+    const allVals = sentiments.flatMap(s => emoList.map(e => matrix[s][e]));
+    const maxVal = Math.max(...allVals, 1);
+
+    function heatColor(v) {
+      const t = v / maxVal;
+      if (t < 0.001) return { bg: 'rgba(255,255,255,0.04)', text: 'rgba(255,255,255,0.2)' };
+      const r = Math.round(124 + (226 - 124) * t);
+      const g = Math.round(106 - 106 * t);
+      const b = Math.round(247 - (247 - 74) * t);
+      return { bg: `rgba(${r},${g},${b},${0.15 + 0.7 * t})`, text: t > 0.5 ? '#fff' : `rgba(${r},${g},${b},0.9)` };
+    }
+
+    const sentimentLabel = { positive: 'Positive', neutral: 'Neutral', negative: 'Negative' };
+
+    let html = `<div class="chart-title" style="margin-bottom:14px">Emotion × Sentiment co-occurrence</div>`;
+    html += `<div class="heatmap-col-labels">`;
+    emoList.forEach(e => { html += `<div class="heatmap-col-label">${e}</div>`; });
+    html += `</div>`;
+
+    sentiments.forEach(s => {
+      html += `<div class="heatmap-row">`;
+      html += `<div class="heatmap-row-label" style="color:${sentimentColor(s)}">${sentimentLabel[s]}</div>`;
+      emoList.forEach(e => {
+        const v = matrix[s][e];
+        const col = heatColor(v);
+        html += `<div class="heatmap-cell" style="background:${col.bg};color:${col.text};">${v || ''}</div>`;
+      });
+      html += `</div>`;
+    });
+
+    html += `
+      <div style="margin-top:14px;display:flex;align-items:center;gap:8px;font-size:11px;color:#888">
+        <span>Low</span>
+        <div style="height:6px;flex:1;max-width:120px;border-radius:3px;background:linear-gradient(to right,rgba(124,106,247,0.2),rgba(226,75,74,0.85))"></div>
+        <span>High</span>
+      </div>`;
+
+    container.innerHTML = html;
+  }
+</script>
+</body>
+</html>
